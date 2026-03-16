@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import LaserScan, JointState
-from std_msgs.msg import Bool, Float32
+from std_msgs.msg import Float32
 
 import numpy as np
 
@@ -20,43 +20,24 @@ class AEBNode(Node):
         super().__init__('aeb_node')
 
         # --- Parameters ---
-        self.declare_parameter('wheel_radius', 0.058)              # F1TENTH simulated wheel radius [m]
-        self.declare_parameter('ttc_threshold', 0.6)               # Minimum TTC before danger flag [s]
-        # Effective minimum valid range — set just above the sensor's hardware
-        # minimum (0.06 m) to discard noise floor readings without masking
-        # real close-range obstacles.
-        self.declare_parameter('range_min_cutoff', 0.07)           # Effective minimum valid range [m]
-        self.declare_parameter('range_floor', 0.3)                 # Minimum safe range [m]
-        self.declare_parameter('range_floor_min_speed', 0.7)       # Min speed to apply range floor [m/s]
-        self.declare_parameter('angular_window_deg', 45.0)         # Half-width of TTC sector [deg]
-        # The range floor uses a narrower window than the TTC check.
-        # Wide-angle beams hitting lateral walls produce short ranges even when
-        # the vehicle is not on a collision course; a tighter window eliminates
-        # those false positives while still catching close frontal obstacles.
-        self.declare_parameter('range_floor_angular_window_deg', 30.0)
-        # Throttle applied while the brake latch is active [-1, 0).
-        # Negative values command active deceleration; 0.0 means coast only.
-        # Active braking is cut off once |speed| drops below brake_stop_speed
-        # to prevent the vehicle from reversing unintentionally.
-        self.declare_parameter('brake_command', 0.0)               # Braking throttle [-1, 0]
-        self.declare_parameter('brake_stop_speed', 0.05)           # Speed threshold to stop active braking [m/s]
+        self.declare_parameter('wheel_radius', 0.058)           # F1TENTH simulated wheel radius [m]
+        self.declare_parameter('ttc_threshold', 0.61)           # Minimum TTC before danger flag [s]
+        # Effective minimum valid range — set to the minimun possible distance
+        # between the LiDAR and a front wall
+        self.declare_parameter('range_min_cutoff', 0.13)        # Effective minimum valid range [m]
+        self.declare_parameter('angular_window_deg', 12.0)      # Half-width of TTC sector [deg]
+        # Throttle applied while the brake latch is active (0).
+        self.declare_parameter('brake_command', 0.0)            # Braking throttle
 
-        self._wheel_radius               = self.get_parameter('wheel_radius').value
-        self._ttc_threshold              = self.get_parameter('ttc_threshold').value
-        self._range_min_cutoff           = self.get_parameter('range_min_cutoff').value
-        self._range_floor                = self.get_parameter('range_floor').value
-        self._range_floor_min_spd        = self.get_parameter('range_floor_min_speed').value
-        self._angular_window             = np.deg2rad(self.get_parameter('angular_window_deg').value)
-        self._range_floor_angular_window = np.deg2rad(self.get_parameter('range_floor_angular_window_deg').value)
-        self._brake_command              = self.get_parameter('brake_command').value
-        self._brake_stop_speed           = self.get_parameter('brake_stop_speed').value
+        self._wheel_radius     = self.get_parameter('wheel_radius').value
+        self._ttc_threshold    = self.get_parameter('ttc_threshold').value
+        self._range_min_cutoff = self.get_parameter('range_min_cutoff').value
+        self._angular_window   = np.deg2rad(self.get_parameter('angular_window_deg').value)
+        self._brake_command    = self.get_parameter('brake_command').value
 
         self.get_logger().info(
             f'AEB node started | wheel_radius={self._wheel_radius} m '
             f'| ttc_threshold={self._ttc_threshold} s '
-            f'| range_floor={self._range_floor} m '
-            f'(min_speed={self._range_floor_min_spd} m/s, '
-            f'window=±{self.get_parameter("range_floor_angular_window_deg").value}°) '
             f'| ttc_window=±{self.get_parameter("angular_window_deg").value}° '
             f'| brake_command={self._brake_command}'
         )
@@ -87,7 +68,6 @@ class AEBNode(Node):
         )
 
         # --- Publishers ---
-        self._danger_pub       = self.create_publisher(Bool,    '/aeb_f110/danger',                       qos)
         self._throttle_cmd_pub = self.create_publisher(Float32, '/autodrive/f1tenth_1/throttle_command',  qos)
         self._steering_cmd_pub = self.create_publisher(Float32, '/autodrive/f1tenth_1/steering_command',  qos)
 
@@ -152,16 +132,14 @@ class AEBNode(Node):
 
         if self._state == AEBState.BRAKING:
             # Release latch only on explicit reverse request from the operator.
-            # This ensures the vehicle resumes only by deliberate input, not by
-            # the operator simply holding a forward key that was already set.
+            # This ensures the vehicle resumes only by deliberate input.
             if requested < 0.0:
                 self._state = AEBState.NORMAL
                 self.get_logger().info('[AEB] Latch released — reverse requested by operator')
                 output = requested
             else:
-                # Apply braking throttle until nearly stopped, then hold at 0
-                # to avoid reversing unintentionally before the latch is released.
-                output = self._brake_command if abs(self._speed) > self._brake_stop_speed else 0.0
+                # Apply and hold throttle at 0
+                output = self._brake_command
         else:
             output = requested
 
@@ -180,9 +158,10 @@ class AEBNode(Node):
 
     def _lidar_callback(self, msg: LaserScan) -> None:
         ranges = np.array(msg.ranges, dtype=np.float64)
+        v = self._speed
 
-        num_beams = len(ranges)
-        angles = msg.angle_min + np.arange(num_beams) * msg.angle_increment
+        if abs(v) < 0.01:
+            return
 
         valid = (
             np.isfinite(ranges)
@@ -190,15 +169,10 @@ class AEBNode(Node):
             & (ranges < msg.range_max)
         )
         ranges = ranges[valid]
-        angles = angles[valid]
-
-        danger_msg = Bool()
-        v = self._speed
-
-        if abs(v) < 0.01 or len(ranges) == 0:
-            danger_msg.data = False
-            self._danger_pub.publish(danger_msg)
+        if len(ranges) == 0:
             return
+
+        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
 
         # Angular window filter
         in_window = np.abs(angles) <= self._angular_window
@@ -206,67 +180,38 @@ class AEBNode(Node):
         angles = angles[in_window]
 
         if len(ranges) == 0:
-            danger_msg.data = False
-            self._danger_pub.publish(danger_msg)
             return
 
         # iTTC (F1TENTH Lab 2)
         #   range_rate_i = v · cos(θᵢ)
         #   TTC_i = r_i / range_rate_i   (only where range_rate_i > 0)
         range_rates = v * np.cos(angles)
-        approaching = range_rates > 0.0
+        approaching = range_rates > 0.7
 
         if not np.any(approaching):
-            danger_msg.data = False
-            self._danger_pub.publish(danger_msg)
             return
 
         approaching_ranges = ranges[approaching]
         ttc = approaching_ranges / range_rates[approaching]
-        min_ttc   = float(np.min(ttc))
-        min_range = float(np.min(approaching_ranges))
+        min_ttc = float(np.min(ttc))
 
-        ttc_danger = min_ttc < self._ttc_threshold
-
-        # Range floor uses its own narrower angular window to avoid triggering
-        # on lateral walls that fall within the wider TTC sector.
-        in_range_window  = np.abs(angles) <= self._range_floor_angular_window
-        range_floor_mask = in_range_window & approaching
-        if np.any(range_floor_mask):
-            range_floor_min = float(np.min(ranges[range_floor_mask]))
-        else:
-            range_floor_min = float('inf')
-        range_danger = (range_floor_min < self._range_floor) and (abs(v) >= self._range_floor_min_spd)
-
-        danger = ttc_danger or range_danger
-        danger_msg.data = danger
-        self._danger_pub.publish(danger_msg)
+        danger = min_ttc < self._ttc_threshold
 
         if danger and self._state == AEBState.NORMAL:
             self._state = AEBState.BRAKING
-            # Publish brake command immediately without waiting for the next
-            # teleop message — at 3.4 Hz lidar vs 10 Hz teleop, reacting
-            # here cuts worst-case latency from ~300 ms to ~100 ms.
             throttle_msg = Float32()
             throttle_msg.data = float(self._brake_command)
             self._throttle_cmd_pub.publish(throttle_msg)
-            reason = []
-            if ttc_danger:
-                reason.append(f'TTC={min_ttc:.3f} s < {self._ttc_threshold} s')
-            if range_danger:
-                reason.append(f'range={min_range:.3f} m < {self._range_floor} m')
             self.get_logger().warn(
-                f'[AEB] BRAKING latched | speed={v:+.3f} m/s | {" | ".join(reason)}'
+                f'[AEB] BRAKING latched | speed={v:+.3f} m/s | TTC={min_ttc:.3f} s < {self._ttc_threshold} s'
             )
         elif danger and self._state == AEBState.BRAKING:
             self.get_logger().debug(
-                f'[AEB] BRAKING active  | speed={v:+.3f} m/s '
-                f'| min_TTC={min_ttc:.3f} s | min_range={min_range:.3f} m'
+                f'[AEB] BRAKING active  | speed={v:+.3f} m/s | min_TTC={min_ttc:.3f} s'
             )
         else:
             self.get_logger().debug(
-                f'[AEB] clear   | speed={v:+.3f} m/s | min_TTC={min_ttc:.3f} s '
-                f'| min_range={min_range:.3f} m'
+                f'[AEB] clear   | speed={v:+.3f} m/s | min_TTC={min_ttc:.3f} s'
             )
 
 
