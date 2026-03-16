@@ -28,18 +28,21 @@ class AEBNode(Node):
         self.declare_parameter('angular_window_deg', 12.0)      # Half-width of TTC sector [deg]
         # Throttle applied while the brake latch is active (0).
         self.declare_parameter('brake_command', 0.0)            # Braking throttle
+        self.declare_parameter('min_speed', 0.8)               # Minimum speed to engage AEB [m/s]
 
         self._wheel_radius     = self.get_parameter('wheel_radius').value
         self._ttc_threshold    = self.get_parameter('ttc_threshold').value
         self._range_min_cutoff = self.get_parameter('range_min_cutoff').value
         self._angular_window   = np.deg2rad(self.get_parameter('angular_window_deg').value)
         self._brake_command    = self.get_parameter('brake_command').value
+        self._min_speed        = self.get_parameter('min_speed').value
 
         self.get_logger().info(
             f'AEB node started | wheel_radius={self._wheel_radius} m '
             f'| ttc_threshold={self._ttc_threshold} s '
             f'| ttc_window=±{self.get_parameter("angular_window_deg").value}° '
-            f'| brake_command={self._brake_command}'
+            f'| brake_command={self._brake_command} '
+            f'| min_speed={self._min_speed} m/s'
         )
 
         # --- QoS ---
@@ -160,7 +163,7 @@ class AEBNode(Node):
         ranges = np.array(msg.ranges, dtype=np.float64)
         v = self._speed
 
-        if abs(v) < 0.01:
+        if abs(v) < self._min_speed:
             return
 
         valid = (

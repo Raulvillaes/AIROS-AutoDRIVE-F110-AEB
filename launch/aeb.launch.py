@@ -15,6 +15,7 @@ def generate_launch_description():
                 'ttc_threshold': 0.61,
                 'angular_window_deg': 12.0,
                 'brake_command': 0.0,
+                'min_speed': 0.8,
             }],
         ),
     ])

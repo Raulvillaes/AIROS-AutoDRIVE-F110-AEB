@@ -28,6 +28,3 @@ log/
 # OS
 .DS_Store
 Thumbs.db
-
-#Personal
-REMINDERS.md
