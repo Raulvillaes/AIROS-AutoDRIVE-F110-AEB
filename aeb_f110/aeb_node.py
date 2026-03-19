@@ -21,11 +21,11 @@ class AEBNode(Node):
 
         # --- Parameters ---
         self.declare_parameter('wheel_radius', 0.058)           # F1TENTH simulated wheel radius [m]
-        self.declare_parameter('ttc_threshold', 0.61)           # Minimum TTC before danger flag [s]
+        self.declare_parameter('ttc_threshold', 0.66)           # Minimum TTC before danger flag [s]
         # Effective minimum valid range — set to the minimun possible distance
         # between the LiDAR and a front wall
         self.declare_parameter('range_min_cutoff', 0.13)        # Effective minimum valid range [m]
-        self.declare_parameter('angular_window_deg', 12.0)      # Half-width of TTC sector [deg]
+        self.declare_parameter('angular_window_deg', 12.5)      # Half-width of TTC sector [deg]
         # Throttle applied while the brake latch is active (0).
         self.declare_parameter('brake_command', 0.0)            # Braking throttle
         self.declare_parameter('min_speed', 0.8)               # Minimum speed to engage AEB [m/s]

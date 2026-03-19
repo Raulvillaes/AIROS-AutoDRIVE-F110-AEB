@@ -22,7 +22,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'aeb_node = aeb_f110.aeb_node:main',
+            'aeb_node           = aeb_f110.aeb_node:main',
+            'linear_driver_node = aeb_f110.linear_driver_node:main',
         ],
     },
 )
