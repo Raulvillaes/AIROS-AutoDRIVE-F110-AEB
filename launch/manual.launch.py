@@ -4,22 +4,17 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     """
-    Autonomous mode: AEB + multiplexer + linear driver.
+    Manual (teleop) mode: AEB + multiplexer + mode switcher.
 
-    Data flow:
-        linear_driver_node → /aeb_f110/sources/auto/*
-                                  ↓
-                            mux_node  ←  mode_switcher_node (separate terminal)
-                                  ↓
-                            /aeb_f110/throttle_request  →  aeb_node  →  simulator
-                            /aeb_f110/steering_request
+    The linear driver is NOT launched. The active source defaults to 'teleop'.
 
-    Run in separate terminals:
-        ros2 run aeb_f110 mode_switcher_node
-
+    Launch teleop in a separate terminal, remapped to the teleop source namespace:
         ros2 run autodrive_f1tenth teleop_keyboard --ros-args \\
           -r /autodrive/f1tenth_1/throttle_command:=/aeb_f110/sources/teleop/throttle \\
           -r /autodrive/f1tenth_1/steering_command:=/aeb_f110/sources/teleop/steering
+
+    Press [A] in the mode_switcher terminal to enable autonomous (linear_driver must
+    also be running) or [T] to return to teleop.
     """
     return LaunchDescription([
 
@@ -39,29 +34,24 @@ def generate_launch_description():
             }],
         ),
 
-        # --- Multiplexer ---
+        # --- Multiplexer (teleop active by default) ---
         Node(
             package='aeb_f110',
             executable='mux_node',
             name='mux_node',
             output='screen',
             parameters=[{
-                'active_source':  'auto',
+                'active_source':  'teleop',
                 'source_timeout': 0.5,
             }],
         ),
 
-        # --- Linear driver (autonomous straight-line source) ---
+        # --- Mode switcher (keyboard interface) ---
         Node(
             package='aeb_f110',
-            executable='linear_driver_node',
-            name='linear_driver_node',
-            output='screen',
-            parameters=[{
-                'throttle':     0.3,
-                'steering':     0.0,
-                'publish_rate': 20.0,
-            }],
+            executable='mode_switcher_node',
+            name='mode_switcher_node',
+            prefix='xterm -e',
         ),
 
     ])
