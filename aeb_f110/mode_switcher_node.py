@@ -10,34 +10,27 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_msgs.msg import String
 
-HELP = """
-┌──────────────────────────────────────┐
-│      AEB F110 — Mode Switcher        │
-│                                      │
-│  [A]  Switch to AUTO  (linear driver)│
-│  [T]  Switch to TELEOP               │
-│  [Q]  Quit                           │
-└──────────────────────────────────────┘
+INFO = """
+---------------------------------------
+AEB F110 - Mode Switcher
+---------------------------------------
+
+A : Switch to AUTO  (linear driver)
+T : Switch to TELEOP
+
+Press CTRL+C to quit
+
+NOTE: Press keys within this terminal
+---------------------------------------
 """
 
 
 class ModeSwitcherNode(Node):
-    """
-    Keyboard-driven source selector for the mux_node.
-
-    Reads single keypresses from stdin (non-blocking via select) and publishes
-    the chosen source name to /aeb_f110/mux/active_source.
-
-    Keys:
-        a / A  → 'auto'
-        t / T  → 'teleop'
-        q / Q  → shutdown
-    """
-
     KEY_MAP = {
         'a': 'auto',
         't': 'teleop',
     }
+
 
     def __init__(self):
         super().__init__('mode_switcher_node')
@@ -57,8 +50,8 @@ class ModeSwitcherNode(Node):
         # Switch stdin to raw mode (no echo, immediate char delivery)
         tty.setraw(self._fd)
 
-        print(HELP, flush=True)
-        print('Current mode: AUTO\n', flush=True)
+        print(INFO, flush=True)
+        print('Current mode: AUTO', flush=True)
 
         # Poll stdin at 10 Hz — non-blocking
         self.create_timer(0.1, self._key_poll)
@@ -69,12 +62,6 @@ class ModeSwitcherNode(Node):
             return
 
         ch = sys.stdin.read(1).lower()
-
-        if ch == 'q':
-            print('\nMode switcher shutting down...', flush=True)
-            self._restore_terminal()
-            rclpy.shutdown()
-            return
 
         if ch in self.KEY_MAP:
             source = self.KEY_MAP[ch]
