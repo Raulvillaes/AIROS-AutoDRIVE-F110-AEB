@@ -115,7 +115,8 @@ class MuxNode(Node):
             self.get_logger().info(
                 f'[MUX] Source switched: {self._active_source} → {requested}'
             )
-            self._active_source = requested
+            self._active_source  = requested
+            self._watchdog_active = False
 
     # ------------------------------------------------------------------
     # Watchdog + forward timer

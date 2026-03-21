@@ -62,7 +62,7 @@ class AEBNode(Node):
         self.create_subscription(
             JointState, '/autodrive/f1tenth_1/right_encoder', self._right_encoder_callback, qos
         )
-        # Throttle and steering requests from the operator (teleop remapped here)
+        # Throttle and steering requests forwarded by the mux node
         self.create_subscription(
             Float32, '/aeb_f110/throttle_request', self._throttle_request_callback, qos
         )
@@ -166,16 +166,17 @@ class AEBNode(Node):
         if abs(v) < self._min_speed:
             return
 
+        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+
         valid = (
             np.isfinite(ranges)
             & (ranges > self._range_min_cutoff)
             & (ranges < msg.range_max)
         )
         ranges = ranges[valid]
+        angles = angles[valid]
         if len(ranges) == 0:
             return
-
-        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
 
         # Angular window filter
         in_window = np.abs(angles) <= self._angular_window

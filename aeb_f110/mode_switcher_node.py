@@ -31,7 +31,6 @@ class ModeSwitcherNode(Node):
         't': 'teleop',
     }
 
-
     def __init__(self):
         super().__init__('mode_switcher_node')
 

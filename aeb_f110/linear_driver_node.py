@@ -10,15 +10,9 @@ class LinearDriverNode(Node):
     """
     Autonomous linear driver for F1TENTH on AutoDRIVE.
 
-    Publishes a constant forward throttle and zero steering at a fixed rate.
-    Commands are published to the /aeb_f110/sources/auto/* namespace so that
-    a future multiplexer node can arbitrate between this source and others
-    (e.g. teleop) before forwarding to the AEB safety layer.
-
-    In the current single-source setup (Option A), the launch file remaps
-    these topics directly to the AEB's input topics:
-        /aeb_f110/sources/auto/throttle  →  /aeb_f110/throttle_request
-        /aeb_f110/sources/auto/steering  →  /aeb_f110/steering_request
+    Publishes a constant forward throttle and zero steering at a fixed rate
+    to /aeb_f110/sources/auto/*. The mux_node arbitrates between this source
+    and others (e.g. teleop) before forwarding to the AEB safety layer.
     """
 
     def __init__(self):
@@ -47,8 +41,6 @@ class LinearDriverNode(Node):
         )
 
         # --- Publishers ---
-        # These topics are remapped at launch time to /aeb_f110/throttle_request
-        # and /aeb_f110/steering_request until a multiplexer node is introduced.
         self._throttle_pub = self.create_publisher(
             Float32, '/aeb_f110/sources/auto/throttle', qos
         )
