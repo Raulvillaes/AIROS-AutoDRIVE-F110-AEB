@@ -28,3 +28,6 @@ log/
 # OS
 .DS_Store
 Thumbs.db
+
+#Personal
+ISSUES.md

@@ -99,6 +99,8 @@ class AEBNode(Node):
     # ------------------------------------------------------------------
 
     def _left_encoder_callback(self, msg: JointState) -> None:
+        if not msg.position:
+            return
         angle = msg.position[0]
         t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 
@@ -113,6 +115,8 @@ class AEBNode(Node):
         self._speed = (self._left_speed + self._right_speed) / 2.0
 
     def _right_encoder_callback(self, msg: JointState) -> None:
+        if not msg.position:
+            return
         angle = msg.position[0]
         t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 
