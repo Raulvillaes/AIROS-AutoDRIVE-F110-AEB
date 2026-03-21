@@ -46,8 +46,8 @@ class ModeSwitcherNode(Node):
         self._fd           = sys.stdin.fileno()
         self._old_settings = termios.tcgetattr(self._fd)
 
-        # Switch stdin to raw mode (no echo, immediate char delivery)
-        tty.setraw(self._fd)
+        # Switch stdin to cbreak mode (no echo, immediate char delivery, SIGINT preserved)
+        tty.setcbreak(self._fd)
 
         print(INFO, flush=True)
         print('Current mode: AUTO', flush=True)
