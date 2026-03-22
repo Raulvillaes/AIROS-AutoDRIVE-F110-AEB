@@ -49,11 +49,15 @@ class ModeSwitcherNode(Node):
         # Switch stdin to cbreak mode (no echo, immediate char delivery, SIGINT preserved)
         tty.setcbreak(self._fd)
 
-        print(INFO, flush=True)
-        print('Current mode: AUTO', flush=True)
+        try:
+            print(INFO, flush=True)
+            print('Current mode: AUTO', flush=True)
 
-        # Poll stdin at 10 Hz — non-blocking
-        self.create_timer(0.1, self._key_poll)
+            # Poll stdin at 10 Hz — non-blocking
+            self.create_timer(0.1, self._key_poll)
+        except Exception:
+            self._restore_terminal()
+            raise
 
     def _key_poll(self) -> None:
         ready, _, _ = select.select([sys.stdin], [], [], 0.0)
@@ -73,8 +77,10 @@ class ModeSwitcherNode(Node):
         termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
 
     def destroy_node(self) -> None:
-        self._restore_terminal()
-        super().destroy_node()
+        try:
+            self._restore_terminal()
+        finally:
+            super().destroy_node()
 
 
 def main(args=None):
