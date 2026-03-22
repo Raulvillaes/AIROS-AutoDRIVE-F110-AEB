@@ -102,6 +102,8 @@ class MuxNode(Node):
 
     def _steering_cb(self, msg: Float32, source: str) -> None:
         self._sources[source]['steering'] = msg.data
+        # stamp no se actualiza aquí — el watchdog solo monitorea throttle,
+        # que es el canal de seguridad crítico.
 
     def _source_select_cb(self, msg: String) -> None:
         requested = msg.data.strip()

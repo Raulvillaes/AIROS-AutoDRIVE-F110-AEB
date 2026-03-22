@@ -29,20 +29,26 @@ class AEBNode(Node):
         # Throttle applied while the brake latch is active (0).
         self.declare_parameter('brake_command', 0.0)            # Braking throttle
         self.declare_parameter('min_speed', 0.8)               # Minimum speed to engage AEB [m/s]
+        self.declare_parameter('encoder_timeout', 0.5)         # Max age of encoder data before speed is considered stale [s]
+        self.declare_parameter('max_wheel_speed', 8.0)         # Physical speed ceiling for spike / wrap-around rejection [m/s]
 
-        self._wheel_radius     = self.get_parameter('wheel_radius').value
-        self._ttc_threshold    = self.get_parameter('ttc_threshold').value
-        self._range_min_cutoff = self.get_parameter('range_min_cutoff').value
-        self._angular_window   = np.deg2rad(self.get_parameter('angular_window_deg').value)
-        self._brake_command    = self.get_parameter('brake_command').value
-        self._min_speed        = self.get_parameter('min_speed').value
+        self._wheel_radius      = self.get_parameter('wheel_radius').value
+        self._ttc_threshold     = self.get_parameter('ttc_threshold').value
+        self._range_min_cutoff  = self.get_parameter('range_min_cutoff').value
+        self._angular_window    = np.deg2rad(self.get_parameter('angular_window_deg').value)
+        self._brake_command     = self.get_parameter('brake_command').value
+        self._min_speed         = self.get_parameter('min_speed').value
+        self._encoder_timeout   = self.get_parameter('encoder_timeout').value
+        self._max_wheel_speed   = self.get_parameter('max_wheel_speed').value
 
         self.get_logger().info(
             f'AEB node started | wheel_radius={self._wheel_radius} m '
             f'| ttc_threshold={self._ttc_threshold} s '
             f'| ttc_window=±{self.get_parameter("angular_window_deg").value}° '
             f'| brake_command={self._brake_command} '
-            f'| min_speed={self._min_speed} m/s'
+            f'| min_speed={self._min_speed} m/s '
+            f'| encoder_timeout={self._encoder_timeout} s '
+            f'| max_wheel_speed={self._max_wheel_speed} m/s'
         )
 
         # --- QoS ---
@@ -87,6 +93,9 @@ class AEBNode(Node):
         # Longitudinal speed estimate [m/s]
         self._speed: float = 0.0
 
+        # Timestamp of the last encoder message received (ROS clock)
+        self._last_encoder_stamp = None
+
         # --- AEB state machine ---
         # NORMAL:  pass operator throttle through to the bridge unchanged.
         # BRAKING: override throttle regardless of operator input.
@@ -108,11 +117,21 @@ class AEBNode(Node):
             dt = t - self._left_time_prev
             if dt > 0.0:
                 omega = (angle - self._left_angle_prev) / dt   # [rad/s]
-                self._left_speed = omega * self._wheel_radius   # [m/s]
+                speed = omega * self._wheel_radius              # [m/s]
+                # Reject spikes caused by encoder wrap-around or simulator resets.
+                if abs(speed) <= self._max_wheel_speed:
+                    self._left_speed = speed
+                else:
+                    self.get_logger().warning(
+                        f'[AEB] Left encoder spike discarded: {speed:.2f} m/s'
+                    )
 
         self._left_angle_prev = angle
         self._left_time_prev = t
         self._speed = (self._left_speed + self._right_speed) / 2.0
+        # Mark the encoder as alive so the staleness check in _lidar_callback
+        # knows this data is fresh.
+        self._last_encoder_stamp = self.get_clock().now()
 
     def _right_encoder_callback(self, msg: JointState) -> None:
         if not msg.position:
@@ -124,11 +143,21 @@ class AEBNode(Node):
             dt = t - self._right_time_prev
             if dt > 0.0:
                 omega = (angle - self._right_angle_prev) / dt   # [rad/s]
-                self._right_speed = omega * self._wheel_radius   # [m/s]
+                speed = omega * self._wheel_radius              # [m/s]
+                # Reject spikes caused by encoder wrap-around or simulator resets.
+                if abs(speed) <= self._max_wheel_speed:
+                    self._right_speed = speed
+                else:
+                    self.get_logger().warning(
+                        f'[AEB] Right encoder spike discarded: {speed:.2f} m/s'
+                    )
 
         self._right_angle_prev = angle
         self._right_time_prev = t
         self._speed = (self._left_speed + self._right_speed) / 2.0
+        # Mark the encoder as alive so the staleness check in _lidar_callback
+        # knows this data is fresh.
+        self._last_encoder_stamp = self.get_clock().now()
 
     # ------------------------------------------------------------------
     # Operator request callbacks — arbitration point
@@ -165,6 +194,22 @@ class AEBNode(Node):
 
     def _lidar_callback(self, msg: LaserScan) -> None:
         ranges = np.array(msg.ranges, dtype=np.float64)
+
+        # Guard: if encoders have never published, speed is unknown — skip iTTC.
+        if self._last_encoder_stamp is None:
+            return
+
+        # Guard: if the last encoder message is older than encoder_timeout, the
+        # speed estimate is stale and cannot be trusted. Skipping iTTC is the
+        # safe choice — it prevents the AEB from acting on a ghost speed value
+        # that no longer reflects the vehicle's actual state.
+        encoder_age = (self.get_clock().now() - self._last_encoder_stamp).nanoseconds * 1e-9
+        if encoder_age > self._encoder_timeout:
+            self.get_logger().warning(
+                f'[AEB] Encoder data stale ({encoder_age:.2f} s) — skipping iTTC'
+            )
+            return
+
         v = self._speed
 
         if abs(v) < self._min_speed:
