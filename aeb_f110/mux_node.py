@@ -36,7 +36,7 @@ class MuxNode(Node):
         self._source_timeout = self.get_parameter('source_timeout').value
 
         if self._active_source not in self.SOURCES:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f'[MUX] Unknown active_source "{self._active_source}", '
                 f'falling back to "auto"'
             )
@@ -106,7 +106,7 @@ class MuxNode(Node):
     def _source_select_cb(self, msg: String) -> None:
         requested = msg.data.strip()
         if requested not in self.SOURCES:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f'[MUX] Requested unknown source "{requested}", ignored. '
                 f'Known sources: {self.SOURCES}'
             )
@@ -131,7 +131,7 @@ class MuxNode(Node):
             # Source has never published — safety: send zero throttle
             self._publish(0.0, 0.0)
             if not self._watchdog_active:
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f'[MUX] Watchdog: source "{self._active_source}" has not published yet'
                 )
                 self._watchdog_active = True
@@ -142,7 +142,7 @@ class MuxNode(Node):
         if age > self._source_timeout:
             self._publish(0.0, 0.0)
             if not self._watchdog_active:
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f'[MUX] Watchdog: source "{self._active_source}" timeout '
                     f'({age:.2f} s > {self._source_timeout} s) — throttle zeroed'
                 )

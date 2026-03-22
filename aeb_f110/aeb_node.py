@@ -194,7 +194,7 @@ class AEBNode(Node):
         #   range_rate_i = v · cos(θᵢ)
         #   TTC_i = r_i / range_rate_i   (only where range_rate_i > 0)
         range_rates = v * np.cos(angles)
-        approaching = range_rates > 0.7
+        approaching = range_rates > 0.0
 
         if not np.any(approaching):
             return
@@ -210,7 +210,7 @@ class AEBNode(Node):
             throttle_msg = Float32()
             throttle_msg.data = float(self._brake_command)
             self._throttle_cmd_pub.publish(throttle_msg)
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f'[AEB] BRAKING latched | speed={v:+.3f} m/s | TTC={min_ttc:.3f} s < {self._ttc_threshold} s'
             )
         elif danger and self._state == AEBState.BRAKING:
