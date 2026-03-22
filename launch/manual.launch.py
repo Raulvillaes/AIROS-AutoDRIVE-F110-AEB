@@ -4,17 +4,17 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     """
-    Manual (teleop) mode: AEB + multiplexer + mode switcher.
+    Manual (teleop) mode: AEB + multiplexer.
 
     The linear driver is NOT launched. The active source defaults to 'teleop'.
 
-    Launch teleop in a separate terminal, remapped to the teleop source namespace:
+    Run each of the following in a separate terminal:
+
         ros2 run autodrive_f1tenth teleop_keyboard --ros-args \\
           -r /autodrive/f1tenth_1/throttle_command:=/aeb_f110/sources/teleop/throttle \\
           -r /autodrive/f1tenth_1/steering_command:=/aeb_f110/sources/teleop/steering
 
-    Press [A] in the mode_switcher terminal to enable autonomous (linear_driver must
-    also be running) or [T] to return to teleop.
+        ros2 run aeb_f110 mode_switcher_node
     """
     return LaunchDescription([
 
@@ -44,14 +44,6 @@ def generate_launch_description():
                 'active_source':  'teleop',
                 'source_timeout': 0.5,
             }],
-        ),
-
-        # --- Mode switcher (keyboard interface) ---
-        Node(
-            package='aeb_f110',
-            executable='mode_switcher_node',
-            name='mode_switcher_node',
-            prefix='xterm -e',
         ),
 
     ])
