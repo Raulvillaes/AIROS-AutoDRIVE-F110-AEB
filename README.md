@@ -99,6 +99,8 @@ A : Switch to AUTO  (linear driver)
 T : Switch to TELEOP
 
 Press CTRL+C to quit
+
+NOTE: Press keys within this terminal
 ---------------------------------------
 ```
 
@@ -150,7 +152,7 @@ On every LiDAR scan the AEB node:
 
    ```
    range_rate_i = v · cos(θᵢ)
-   TTC_i        = rᵢ / range_rate_i   (only where range_rate_i > 0.7)
+   TTC_i        = rᵢ / range_rate_i   (only where range_rate_i > 0)
    ```
 
 4. **Triggers braking** if `min(TTC) < ttc_threshold`.
@@ -177,7 +179,8 @@ aeb_f110/
 │   ├── linear_driver_node.py   # Autonomous straight-line driver
 │   └── mode_switcher_node.py   # Keyboard interface to switch active source
 ├── launch/
-│   └── auto.launch.py          # Launches AEB + mux + linear driver
+│   ├── auto.launch.py          # Launches AEB + mux + linear driver
+│   └── manual.launch.py        # Launches AEB + mux (teleop active by default)
 ├── resource/
 │   └── aeb_f110
 ├── demo.gif
@@ -202,6 +205,8 @@ All parameters can be tuned in [`launch/auto.launch.py`](launch/auto.launch.py).
 | `angular_window_deg` | `12.5` ° | Half-width of the forward sector used for TTC evaluation |
 | `brake_command` | `0.0` | Throttle value applied while the brake latch is active |
 | `min_speed` | `0.8` m/s | Minimum speed below which AEB does not engage |
+| `encoder_timeout` | `0.5` s | Max age of encoder data — iTTC is skipped if exceeded |
+| `max_wheel_speed` | `8.0` m/s | Speed ceiling for encoder spike rejection (wrap-around guard) |
 
 ### `linear_driver_node`
 

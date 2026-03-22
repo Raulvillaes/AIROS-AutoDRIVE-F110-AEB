@@ -31,6 +31,8 @@ def generate_launch_description():
                 'angular_window_deg': 12.5,
                 'brake_command':      0.0,
                 'min_speed':          0.8,
+                'encoder_timeout':    0.5,
+                'max_wheel_speed':    8.0,
             }],
         ),
 
